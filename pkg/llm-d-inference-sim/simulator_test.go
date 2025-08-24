@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -801,7 +802,7 @@ var _ = Describe("Simulator", func() {
 				simulator.config.TimeToFirstTokenStdDev = timeToFirstTokenStdDev
 				simulator.config.KVCacheTransferLatency = kvCacheLatency
 				simulator.config.KVCacheTransferLatencyStdDev = kvCacheLatencyStdDev
-				timeToFirst := simulator.getTimeToFirstToken(doREmotePrefill)
+				timeToFirst := simulator.getTimeToFirstToken(doREmotePrefill, 1)
 				if doREmotePrefill {
 					Expect(timeToFirst).To(BeNumerically(">=", int(float32(kvCacheLatency)*0.3)))
 					Expect(timeToFirst).To(BeNumerically("<=", int(float32(kvCacheLatency)*1.7)))
@@ -821,6 +822,63 @@ var _ = Describe("Simulator", func() {
 			Entry(nil, 10000, 8000, 1000, 900, false), // invalid std dev, used for testing purposes
 			Entry(nil, 10000, 0, 1000, 0, true),
 			Entry(nil, 10000, 0, 1000, 0, false),
+		)
+
+		It("when <time-to-first-token> is not 0, ignore <prefill-overhead>", func() {
+			timeToFirstToken := 10000
+			prefillOverhead := 100
+			simulator.config.TimeToFirstToken = timeToFirstToken
+			simulator.config.PrefillOverhead = prefillOverhead
+			timeToFirst := simulator.getTimeToFirstToken(false, 1)
+			Expect(timeToFirst).To(BeNumerically(">=", int(float32(timeToFirstToken)*0.3)))
+			Expect(timeToFirst).To(BeNumerically("<=", int(float32(timeToFirstToken)*1.7)))
+		})
+
+		It("when <time-to-first-token> is 0, use <prefill-overhead>", func() {
+			simulator.config.TimeToFirstToken = 0
+			simulator.config.PrefillOverhead = 100
+			timeToFirst := simulator.getTimeToFirstToken(false, 1)
+			Expect(timeToFirst).To(BeNumerically(">=", 100))
+		})
+
+		DescribeTable("time to first token is super linear of prefill against number of prompt tokens",
+			func(prefillOverhead int, tolerance float64, minNTokens int, maxNTokens int) {
+				for nTokens := minNTokens; nTokens <= maxNTokens; nTokens++ {
+					square := prefillOverhead * nTokens * nTokens
+					simulator.config.PrefillOverhead = prefillOverhead
+					timeToFirst := simulator.getTimeToFirstToken(false, nTokens)
+					diffRatio := math.Abs(float64(timeToFirst-square)) / float64(square)
+					Expect(diffRatio).To(BeNumerically("<", tolerance))
+				}
+			},
+			func(prefillOverhead int, tolerance float64, minNTokens int, maxNTokens int) string {
+				return fmt.Sprintf("prefillOverhead: %d tolerance: %f minNTokens: %d maxNTokens: %d",
+					prefillOverhead, tolerance, minNTokens, maxNTokens)
+			},
+			Entry("small numbers", 100, 0.1, 1, 10),
+			Entry("medium numbers, larger range", 200, 0.1, 50, 100),
+			Entry("large numbers", 150, 0.05, 20000, 20010),
+		)
+
+		DescribeTable("time to first token is log-linear of prefill against number of prompt tokens",
+			func(prefillOverhead int, tolerance float64, minNTokens int, maxNTokens int) {
+				simulator.config.PrefillOverheadComplexity = "nlog(n)"
+
+				for nTokens := minNTokens; nTokens <= maxNTokens; nTokens++ {
+					nlogn := int(float64(prefillOverhead) * float64(nTokens) * math.Log2(float64(nTokens)))
+					simulator.config.PrefillOverhead = prefillOverhead
+					timeToFirst := simulator.getTimeToFirstToken(false, nTokens)
+					diffRatio := math.Abs(float64(timeToFirst-nlogn)) / float64(nlogn)
+					Expect(diffRatio).To(BeNumerically("<", tolerance))
+				}
+			},
+			func(prefillOverhead int, tolerance float64, minNTokens int, maxNTokens int) string {
+				return fmt.Sprintf("prefillOverhead: %d tolerance: %f minNTokens: %d maxNTokens: %d",
+					prefillOverhead, tolerance, minNTokens, maxNTokens)
+			},
+			Entry("small numbers", 100, 0.1, 2, 10),
+			Entry("medium numbers, larger range", 200, 0.1, 50, 100),
+			Entry("large numbers", 150, 0.05, 20000, 20010),
 		)
 	})
 

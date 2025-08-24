@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -465,7 +466,7 @@ func (s *VllmSimulator) reqProcessingWorker(ctx context.Context, id int) {
 							model:            displayModel,
 							doRemotePrefill:  req.IsDoRemotePrefill(),
 						},
-						responseTokens, toolCalls, finishReason, usageDataToSend,
+						usageDataToSend.PromptTokens, responseTokens, toolCalls, finishReason, usageDataToSend,
 					)
 				} else {
 					if req.IsDoRemoteDecode() {
@@ -633,8 +634,9 @@ func (s *VllmSimulator) sendResponse(isChatCompletion bool, ctx *fasthttp.Reques
 	}
 
 	// calculate how long to wait before returning the response, time is based on number of tokens
-	numOfTokens := usageData.CompletionTokens
-	totalMillisToWait := s.getTimeToFirstToken(doRemotePrefill) + s.getTotalInterTokenLatency(numOfTokens)
+	nPromptTokens := usageData.PromptTokens
+	nGenTokens := usageData.CompletionTokens
+	totalMillisToWait := s.getTimeToFirstToken(doRemotePrefill, nPromptTokens) + s.getTotalInterTokenLatency(nGenTokens)
 	time.Sleep(time.Duration(totalMillisToWait) * time.Millisecond)
 
 	ctx.Response.Header.SetContentType("application/json")
@@ -652,7 +654,14 @@ func (s *VllmSimulator) sendResponse(isChatCompletion bool, ctx *fasthttp.Reques
 }
 
 // returns time to first token based on the current request's doRemotePrefill
-func (s *VllmSimulator) getTimeToFirstToken(doRemotePrefill bool) int {
+func (s *VllmSimulator) getTimeToFirstToken(doRemotePrefill bool, nPromptTokens int) int {
+	if s.config.TimeToFirstToken == 0 && s.config.PrefillOverhead != 0 {
+		if nPromptTokens <= 1 {
+			return s.config.PrefillOverhead
+		}
+		return s.calcPrefillOverhead(nPromptTokens)
+	}
+
 	mean := float64(s.config.TimeToFirstToken)
 	stddev := float64(s.config.TimeToFirstTokenStdDev)
 	if doRemotePrefill {
@@ -676,6 +685,22 @@ func (s *VllmSimulator) getTotalInterTokenLatency(numOfTokens int) int {
 		total += s.getInterTokenLatency()
 	}
 	return total
+}
+
+// calc the prefill overhead against number of tokens
+func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int) int {
+	pfOverhead := s.config.PrefillOverhead
+	complexity := s.config.PrefillOverheadComplexity
+	// policies of different complexities of prefill implementation
+	switch complexity {
+	case "n^2", "":
+		// this is simple implementation of n^2
+		return pfOverhead * nPromptTokens * nPromptTokens
+	case "nlog(n)":
+		return int(float64(pfOverhead) * (float64(nPromptTokens) * math.Log2(float64(nPromptTokens))))
+	}
+
+	return 0
 }
 
 // createModelsResponse creates and returns ModelResponse for the current state, returned array of models contains the base model + LoRA adapters if exist
