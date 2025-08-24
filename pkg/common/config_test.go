@@ -388,6 +388,10 @@ var _ = Describe("Simulator configuration", func() {
 			name: "invalid (negative) zmq-max-connect-attempts for config file",
 			args: []string{"cmd", "--config", "../../manifests/invalid-config.yaml"},
 		},
+		{
+			name: "<prefill-overhead> must be set when <prefill-overhead-complexity> is set",
+			args: []string{"cmd", "--prefill-overhead-complexity", "n^2", "--config", "../../manifests/config.yaml"},
+		},
 	}
 
 	for _, test := range invalidTests {
