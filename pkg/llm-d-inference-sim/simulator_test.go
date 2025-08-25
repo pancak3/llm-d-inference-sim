@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/llm-d/llm-d-inference-sim/pkg/common"
 	. "github.com/onsi/ginkgo/v2"
@@ -755,6 +756,8 @@ var _ = Describe("Simulator", func() {
 				KVCacheTransferLatency:       2048,
 				KVCacheTransferLatencyStdDev: 2048,
 			}
+
+			common.InitRandom(time.Now().UnixNano())
 		})
 
 		DescribeTable("should calculate inter token latency correctly",
