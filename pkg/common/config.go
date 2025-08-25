@@ -67,7 +67,9 @@ type Configuration struct {
 	TimeToFirstTokenStdDev int `yaml:"time-to-first-token-std-dev" json:"time-to-first-token-std-dev"`
 
 	// PrefillOverhead time taken to prefill the context, in milliseconds
-	PrefillOverhead   int    `yaml:"prefill-overhead" json:"prefill-overhead"`
+	// PrefillOverhead along with PrefillComplexity defines the time taken to prefill the context
+	PrefillOverhead int `yaml:"prefill-overhead" json:"prefill-overhead"`
+	// options are "n^2" and "nlog(n)"
 	PrefillComplexity string `yaml:"prefill-complexity" json:"prefill-complexity"`
 
 	// InterTokenLatency time between generated tokens, in milliseconds
@@ -84,6 +86,13 @@ type Configuration struct {
 	// than 30% of KVCacheTransferLatency, will not cause the actual latency to differ by more than 70% from
 	// KVCacheTransferLatency
 	KVCacheTransferLatencyStdDev int `yaml:"kv-cache-transfer-latency-std-dev" json:"kv-cache-transfer-latency-std-dev"`
+
+	// KVCacheTransfer overhead time taken to transfer kv-cache from another vLLM instance in case P/D is activated,
+	// in milliseconds.
+	// KVCacheTransferOverhead along with KVCacheTransferComplexity defines the time taken to transfer kv-cache.
+	KVCacheTransferOverhead int `yaml:"kv-cache-transfer-overhead" json:"kv-cache-transfer-overhead"`
+	// options are "linear" and "in-place", default is "linear"
+	KVCacheTransferComplexity string `yaml:"kv-cache-transfer-complexity" json:"kv-cache-transfer-complexity"`
 
 	// Mode defines the simulator response generation mode, valid values: echo, random
 	Mode string `yaml:"mode" json:"mode"`
@@ -319,6 +328,17 @@ func (c *Configuration) validate() error {
 	if float32(c.KVCacheTransferLatencyStdDev) > 0.3*float32(c.KVCacheTransferLatency) {
 		return errors.New("kv-cache tranfer standard deviation cannot be more than 30% of kv-cache tranfer")
 	}
+	if c.KVCacheTransferOverhead < 0 {
+		return errors.New("kv-cache transfer overhead cannot be negative")
+	} else if c.KVCacheTransferOverhead == 0 {
+		if c.KVCacheTransferComplexity != "" {
+			return errors.New("kv-cache transfer complexity is set, but kv-cache transfer overhead is 0")
+		}
+	}
+	if c.KVCacheTransferComplexity != "" && c.KVCacheTransferComplexity != "linear" && c.KVCacheTransferComplexity != "in-place" {
+		return errors.New("kv-cache transfer complexity should be either \"linear\" or \"in-place\"")
+	}
+
 	if c.MaxLoras < 1 {
 		return errors.New("max LoRAs cannot be less than 1")
 	}
@@ -422,6 +442,8 @@ func ParseCommandParamsAndLoadConfig() (*Configuration, error) {
 	f.IntVar(&config.TimeToFirstTokenStdDev, "time-to-first-token-std-dev", config.TimeToFirstTokenStdDev, "Standard deviation for time before the first token will be returned (in milliseconds)")
 	f.IntVar(&config.KVCacheTransferLatencyStdDev, "kv-cache-transfer-latency-std-dev", config.KVCacheTransferLatencyStdDev, "Standard deviation for time for KV-cache transfer from a remote vLLM (in milliseconds)")
 	f.Int64Var(&config.Seed, "seed", config.Seed, "Random seed for operations (if not set, current Unix time in nanoseconds is used)")
+	f.IntVar(&config.KVCacheTransferOverhead, "kv-cache-transfer-overhead", config.KVCacheTransferOverhead, "Time to transfer kv-cache in milliseconds. This argument is ignored if <kv-cache-transfer-latency> is not set.")
+	f.StringVar(&config.KVCacheTransferComplexity, "kv-cache-transfer-complexity", config.KVCacheTransferComplexity, "Complexity of kv-cache transfer based on token length. Options are \"linear\" and \"in-place\". Default is \"linear\".")
 
 	f.IntVar(&config.MaxToolCallIntegerParam, "max-tool-call-integer-param", config.MaxToolCallIntegerParam, "Maximum possible value of integer parameters in a tool call")
 	f.IntVar(&config.MinToolCallIntegerParam, "min-tool-call-integer-param", config.MinToolCallIntegerParam, "Minimum possible value of integer parameters in a tool call")
