@@ -636,7 +636,7 @@ func (s *VllmSimulator) sendResponse(isChatCompletion bool, ctx *fasthttp.Reques
 	// calculate how long to wait before returning the response, time is based on number of tokens
 	nPromptTokens := usageData.PromptTokens
 	nGenTokens := usageData.CompletionTokens
-	totalMillisToWait := s.getTimeToFirstToken(doRemotePrefill, nPromptTokens) + s.getTotalInterTokenLatency(nGenTokens)
+	totalMillisToWait := s.getTimeToFirstToken(nPromptTokens, doRemotePrefill) + s.getTotalInterTokenLatency(nGenTokens)
 	time.Sleep(time.Duration(totalMillisToWait) * time.Millisecond)
 
 	ctx.Response.Header.SetContentType("application/json")
@@ -654,12 +654,12 @@ func (s *VllmSimulator) sendResponse(isChatCompletion bool, ctx *fasthttp.Reques
 }
 
 // returns time to first token based on the current request's doRemotePrefill
-func (s *VllmSimulator) getTimeToFirstToken(doRemotePrefill bool, nPromptTokens int) int {
+func (s *VllmSimulator) getTimeToFirstToken(nPromptTokens int, doRemotePrefill bool) int {
 	if s.config.TimeToFirstToken == 0 && s.config.PrefillOverhead != 0 {
 		if nPromptTokens <= 1 {
 			return s.config.PrefillOverhead
 		}
-		return s.calcPrefillOverhead(nPromptTokens)
+		return s.calcPrefillOverhead(nPromptTokens, doRemotePrefill)
 	}
 
 	mean := float64(s.config.TimeToFirstToken)
@@ -688,7 +688,11 @@ func (s *VllmSimulator) getTotalInterTokenLatency(numOfTokens int) int {
 }
 
 // calc the prefill overhead against number of tokens
-func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int) int {
+func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int, doRemotePrefill bool) int {
+	fmt.Printf("calc prefill overhead, nPromptTokens %d, doRemotePrefill %v\n", nPromptTokens, doRemotePrefill)
+	if doRemotePrefill {
+		return s.calcRemotePrefillOverhead(nPromptTokens)
+	}
 	pfOverhead := s.config.PrefillOverhead
 	complexity := s.config.PrefillComplexity
 	// policies of different complexities of prefill implementation
@@ -699,7 +703,24 @@ func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int) int {
 	case "nlog(n)":
 		return int(float64(pfOverhead) * (float64(nPromptTokens) * math.Log2(float64(nPromptTokens))))
 	}
+	// should never reach here
+	return 0
+}
 
+// calc the remote prefill overhead against number of tokens
+func (s *VllmSimulator) calcRemotePrefillOverhead(nPromptTokens int) int {
+	overhead := s.config.KVCacheTransferOverhead
+	complexity := s.config.KVCacheTransferComplexity
+	switch complexity {
+	case "linear", "":
+		fmt.Printf("linear complexity, overhead %d, nPromptTokens %d\n", overhead, nPromptTokens)
+		return overhead * nPromptTokens
+	case "in-place":
+		// when the context is already filled
+		// this is a simple implementation which return a defined overhead
+		return overhead
+	}
+	// should never reach here
 	return 0
 }
 
