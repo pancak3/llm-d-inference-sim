@@ -664,7 +664,6 @@ func (s *VllmSimulator) getTimeToFirstToken(nPromptTokens int, doRemotePrefill b
 		}
 		return s.calcPrefillOverhead(nPromptTokens, doRemotePrefill)
 	}
-	fmt.Printf("get time to first token %d, nPromptTokens %d, doRemotePrefill %v\n", s.config.TimeToFirstToken, nPromptTokens, doRemotePrefill)
 
 	mean := float64(s.config.TimeToFirstToken)
 	stddev := float64(s.config.TimeToFirstTokenStdDev)
@@ -699,32 +698,31 @@ func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int, doRemotePrefill b
 	pfOverhead := s.config.PrefillOverhead
 	complexity := s.config.PrefillComplexity
 	// policies of different complexities of prefill implementation
+	overhead := 0
 	switch complexity {
 	case "n^2", "":
 		// this is simple implementation of n^2
-		return pfOverhead * nPromptTokens * nPromptTokens
+		overhead = pfOverhead * nPromptTokens * nPromptTokens
 	case "nlog(n)":
-		return int(float64(pfOverhead) * (float64(nPromptTokens) * math.Log2(float64(nPromptTokens))))
+		overhead = int(float64(pfOverhead) * (float64(nPromptTokens) * math.Log2(float64(nPromptTokens))))
 	}
-	// should never reach here
-	return 0
+	return int(common.RandomNorm(float64(overhead), float64(s.config.PrefillOverheadStdDev)))
 }
 
 // calc the remote prefill overhead against number of tokens
 func (s *VllmSimulator) calcRemotePrefillOverhead(nPromptTokens int) int {
 	overhead := s.config.KVCacheTransferOverhead
 	complexity := s.config.KVCacheTransferComplexity
+	total := 0
 	switch complexity {
 	case "linear", "":
-		fmt.Printf("linear complexity, overhead %d, nPromptTokens %d\n", overhead, nPromptTokens)
-		return overhead * nPromptTokens
+		total = overhead * nPromptTokens
 	case "in-place":
 		// when the context is already filled
 		// this is a simple implementation which return a defined overhead
-		return overhead
+		total = overhead
 	}
-	// should never reach here
-	return 0
+	return int(common.RandomNorm(float64(total), float64(s.config.KVCacheTransferOverheadStdDev)))
 }
 
 // createModelsResponse creates and returns ModelResponse for the current state, returned array of models contains the base model + LoRA adapters if exist
