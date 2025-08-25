@@ -690,7 +690,7 @@ func (s *VllmSimulator) getTotalInterTokenLatency(numOfTokens int) int {
 // calc the prefill overhead against number of tokens
 func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int) int {
 	pfOverhead := s.config.PrefillOverhead
-	complexity := s.config.PrefillOverheadComplexity
+	complexity := s.config.PrefillComplexity
 	// policies of different complexities of prefill implementation
 	switch complexity {
 	case "n^2", "":
