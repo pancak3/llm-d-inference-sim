@@ -66,13 +66,17 @@ type Configuration struct {
 	// cause the actual time to first token to differ by more than 70% from TimeToFirstToken
 	TimeToFirstTokenStdDev int `yaml:"time-to-first-token-std-dev" json:"time-to-first-token-std-dev"`
 
-	// PrefillOverhead time taken to prefill the context, in milliseconds
-	// PrefillOverhead along with PrefillComplexity defines the time taken to prefill the context
+	// PrefillOverhead the base overhead for prefill of one token, in milliseconds
+	// in conjunction with PrefillComplexity and PrefillOverheadStdDev
+	// this value defines the time taken to prefill the whole context
 	PrefillOverhead int `yaml:"prefill-overhead" json:"prefill-overhead"`
-	// PrefillOverheadStdDev similar to TimeToFirstTokenStdDev
-	PrefillOverheadStdDev int `yaml:"prefill-overhead-std-dev" json:"prefill-overhead-std-dev"`
-	// options are "n^2" and "nlog(n)"
+	// PrefillComplexity defines how prefill time scales with number of prompt tokens
+	// options are "n^2" and "nlog(n)", default is "n^2"
 	PrefillComplexity string `yaml:"prefill-complexity" json:"prefill-complexity"`
+	// PrefillOverheadStdDev standard deviation for time before the first token will be returned
+	// in milliseconds, required if PrefillOverhead is used, default is 0, the range is according to
+	// the implementation of policy, see PrefillComplexity
+	PrefillOverheadStdDev int `yaml:"prefill-overhead-std-dev" json:"prefill-overhead-std-dev"`
 
 	// InterTokenLatency time between generated tokens, in milliseconds
 	InterTokenLatency int `yaml:"inter-token-latency" json:"inter-token-latency"`
@@ -89,14 +93,17 @@ type Configuration struct {
 	// KVCacheTransferLatency
 	KVCacheTransferLatencyStdDev int `yaml:"kv-cache-transfer-latency-std-dev" json:"kv-cache-transfer-latency-std-dev"`
 
-	// KVCacheTransfer overhead time taken to transfer kv-cache from another vLLM instance in case P/D is activated,
-	// in milliseconds.
-	// KVCacheTransferOverhead along with KVCacheTransferComplexity defines the time taken to transfer kv-cache.
+	// KVCacheTransferOverhead time taken to transfer kv-cache from another vLLM instance in case P/D is activated, for one token
+	// in milliseconds, in conjunction with KVCacheTransferComplexity and KVCacheTransferOverheadStdDev defines the time taken to transfer kv-cache for whole content
 	KVCacheTransferOverhead int `yaml:"kv-cache-transfer-overhead" json:"kv-cache-transfer-overhead"`
-	// KVCacheTransferOverheadStdDev similar to TimeToFirstTokenStdDev
-	KVCacheTransferOverheadStdDev int `yaml:"kv-cache-transfer-overhead-std-dev" json:"kv-cache-transfer-overhead-std-dev"`
+	// KVCacheTransferComplexity the complexity of kv cache transfer against number of prompt tokens
 	// options are "linear" and "in-place", default is "linear"
 	KVCacheTransferComplexity string `yaml:"kv-cache-transfer-complexity" json:"kv-cache-transfer-complexity"`
+	// KVCacheTransferOverheadStdDev standard deviation for time taken to transfer kv-cache
+	// from another vLLM instance in case P/D is activated, in milliseconds
+	// required if KVCacheTransferOverhead is used, default is 0, the range is according to
+	// the implementation of policy, see KVCacheTransferComplexity
+	KVCacheTransferOverheadStdDev int `yaml:"kv-cache-transfer-overhead-std-dev" json:"kv-cache-transfer-overhead-std-dev"`
 
 	// Mode defines the simulator response generation mode, valid values: echo, random
 	Mode string `yaml:"mode" json:"mode"`
