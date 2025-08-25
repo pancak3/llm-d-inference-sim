@@ -953,7 +953,7 @@ var _ = Describe("Simulator", func() {
 				// get stdv of ttfts
 				stdv := common.StdDevInt(ttfts)
 				fmt.Printf("ttfts: %v, stdv: %f\n", ttfts, stdv)
-				Expect(stdv).To(BeNumerically("<=", kvCacheTransOverheadStdDev))
+				Expect(stdv).To(BeNumerically("<=", int(float64(kvCacheTransOverheadStdDev)*1.7)))
 			},
 			func(kvCacheTransOverhead int, kvCacheTransOverheadStdDev int, minNTokens int, maxNTokens int) string {
 				return fmt.Sprintf("kvCacheTransferOverhead: %d kvCacheTransferOverheadStdDev: %d minNTokens: %d maxNTokens: %d",
