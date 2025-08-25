@@ -862,7 +862,7 @@ var _ = Describe("Simulator", func() {
 
 		DescribeTable("time to first token is log-linear of prefill against number of prompt tokens",
 			func(prefillOverhead int, tolerance float64, minNTokens int, maxNTokens int) {
-				simulator.config.PrefillOverheadComplexity = "nlog(n)"
+				simulator.config.PrefillComplexity = "nlog(n)"
 
 				for nTokens := minNTokens; nTokens <= maxNTokens; nTokens++ {
 					nlogn := int(float64(prefillOverhead) * float64(nTokens) * math.Log2(float64(nTokens)))

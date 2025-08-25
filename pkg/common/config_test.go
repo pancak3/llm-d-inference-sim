@@ -389,8 +389,8 @@ var _ = Describe("Simulator configuration", func() {
 			args: []string{"cmd", "--config", "../../manifests/invalid-config.yaml"},
 		},
 		{
-			name: "<prefill-overhead> must be set when <prefill-overhead-complexity> is set",
-			args: []string{"cmd", "--prefill-overhead-complexity", "n^2", "--config", "../../manifests/config.yaml"},
+			name: "<prefill-overhead> must be set when <prefill-complexity> is set",
+			args: []string{"cmd", "--prefill-complexity", "n^2", "--config", "../../manifests/config.yaml"},
 		},
 	}
 
