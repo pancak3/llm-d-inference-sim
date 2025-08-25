@@ -392,6 +392,18 @@ var _ = Describe("Simulator configuration", func() {
 			name: "<prefill-overhead> must be set when <prefill-complexity> is set",
 			args: []string{"cmd", "--prefill-complexity", "n^2", "--config", "../../manifests/config.yaml"},
 		},
+		{
+			name: "<prefill-complexity> should not be 'xxx'",
+			args: []string{"cmd", "--prefill-complexity", "xxx", "--config", "../../manifests/config.yaml"},
+		},
+		{
+			name: "<kv-cache-transfer-overhead> must be set when <kv-cache-transfer-complexity> is set",
+			args: []string{"cmd", "--kv-cache-transfer-complexity", "linear", "--config", "../../manifests/config.yaml"},
+		},
+		{
+			name: "<kv-cache-transfer-complexity> should not be 'xxx'",
+			args: []string{"cmd", "--kv-cache-transfer-complexity", "xxx", "--config", "../../manifests/config.yaml"},
+		},
 	}
 
 	for _, test := range invalidTests {
