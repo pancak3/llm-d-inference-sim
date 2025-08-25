@@ -67,8 +67,8 @@ type Configuration struct {
 	TimeToFirstTokenStdDev int `yaml:"time-to-first-token-std-dev" json:"time-to-first-token-std-dev"`
 
 	// PrefillOverhead time taken to prefill the context, in milliseconds
-	PrefillOverhead           int    `yaml:"prefill-overhead" json:"prefill-overhead"`
-	PrefillOverheadComplexity string `yaml:"prefill-overhead-complexity" json:"prefill-overhead-complexity"`
+	PrefillOverhead   int    `yaml:"prefill-overhead" json:"prefill-overhead"`
+	PrefillComplexity string `yaml:"prefill-complexity" json:"prefill-complexity"`
 
 	// InterTokenLatency time between generated tokens, in milliseconds
 	InterTokenLatency int `yaml:"inter-token-latency" json:"inter-token-latency"`
@@ -303,11 +303,11 @@ func (c *Configuration) validate() error {
 	if c.PrefillOverhead < 0 {
 		return errors.New("prefill overhead cannot be negative")
 	} else if c.PrefillOverhead == 0 {
-		if c.PrefillOverheadComplexity != "" {
+		if c.PrefillComplexity != "" {
 			return errors.New("prefill overhead complexity is set, but prefill overhead is 0")
 		}
 	}
-	if c.PrefillOverheadComplexity != "" && c.PrefillOverheadComplexity != "n^2" && c.PrefillOverheadComplexity != "nlog(n)" {
+	if c.PrefillComplexity != "" && c.PrefillComplexity != "n^2" && c.PrefillComplexity != "nlog(n)" {
 		return errors.New("prefill overhead complexity should be either \"n^2\" or \"nlog(n)\"")
 	}
 	if c.KVCacheTransferLatency < 0 {
@@ -416,7 +416,7 @@ func ParseCommandParamsAndLoadConfig() (*Configuration, error) {
 	f.IntVar(&config.InterTokenLatency, "inter-token-latency", config.InterTokenLatency, "Time to generate one token (in milliseconds)")
 	f.IntVar(&config.TimeToFirstToken, "time-to-first-token", config.TimeToFirstToken, "Time to first token (in milliseconds)")
 	f.IntVar(&config.PrefillOverhead, "prefill-overhead", config.PrefillOverhead, "Time to prefill in milliseconds. This argument is ignored if <time-to-first-token> is not 0.")
-	f.StringVar(&config.PrefillOverheadComplexity, "prefill-overhead-complexity", config.PrefillOverheadComplexity, "Complexity of prefill based on token length. Options are \"n^2\" and \"nlog(n)\". Default is \"n^2\".")
+	f.StringVar(&config.PrefillComplexity, "prefill-complexity", config.PrefillComplexity, "Complexity of prefill based on token length. Options are \"n^2\" and \"nlog(n)\". Default is \"n^2\".")
 	f.IntVar(&config.KVCacheTransferLatency, "kv-cache-transfer-latency", config.KVCacheTransferLatency, "Time for KV-cache transfer from a remote vLLM (in milliseconds)")
 	f.IntVar(&config.InterTokenLatencyStdDev, "inter-token-latency-std-dev", config.InterTokenLatencyStdDev, "Standard deviation for time between generated tokens (in milliseconds)")
 	f.IntVar(&config.TimeToFirstTokenStdDev, "time-to-first-token-std-dev", config.TimeToFirstTokenStdDev, "Standard deviation for time before the first token will be returned (in milliseconds)")
