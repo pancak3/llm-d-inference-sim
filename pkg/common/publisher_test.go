@@ -30,9 +30,12 @@ import (
 )
 
 const (
-	topic   = "test-topic"
-	data    = "Hello"
-	retries = 0
+	zmqEndpoint = "tcp://127.0.0.1:0"
+	netProtocol = "tcp"
+	netEndpoint = "127.0.0.1:"
+	topic       = "test-topic"
+	data        = "Hello"
+	retries     = 0
 )
 
 var _ = Describe("Publisher", func() {
@@ -41,7 +44,7 @@ var _ = Describe("Publisher", func() {
 		Expect(err).NotTo(HaveOccurred())
 		sub, err := zctx.NewSocket(zmq.SUB)
 		Expect(err).NotTo(HaveOccurred())
-		err = sub.Bind("tcp://127.0.0.1:0")
+		err = sub.Bind(zmqEndpoint)
 		Expect(err).NotTo(HaveOccurred())
 		endpoint, err := sub.GetLastEndpoint()
 		Expect(err).NotTo(HaveOccurred())
@@ -95,7 +98,7 @@ var _ = Describe("Publisher", func() {
 		}
 	})
 	It("should retry connection successfully", func() {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		listener, err := net.Listen(netProtocol, netEndpoint)
 		if err != nil {
 			panic(err)
 		}
