@@ -33,10 +33,10 @@ import (
 )
 
 const (
-	req1ID      = "req1"
-	req2ID      = "req2"
-	req3ID      = "req3"
-	zmqEndpoint = "tcp://127.0.0.1:0"
+	req1ID   = "req1"
+	req2ID   = "req2"
+	req3ID   = "req3"
+	endpoint = "tcp://*:*"
 )
 
 type ActionType int
@@ -415,7 +415,7 @@ var _ = Describe("KV cache", Ordered, func() {
 					Port:                  1234,
 					Model:                 "model",
 					KVCacheSize:           testCase.cacheSize,
-					ZMQEndpoint:           zmqEndpoint,
+					ZMQEndpoint:           endpoint,
 					ZMQMaxConnectAttempts: 3,
 				}
 				blockCache, err := newBlockCache(&config, GinkgoLogr)
@@ -532,7 +532,7 @@ func createSub(config *common.Configuration) (*zmq.Socket, string) {
 	Expect(err).NotTo(HaveOccurred())
 	sub, err := zctx.NewSocket(zmq.SUB)
 	Expect(err).NotTo(HaveOccurred())
-	err = sub.Bind(zmqEndpoint)
+	err = sub.Bind(endpoint)
 	Expect(err).NotTo(HaveOccurred())
 	// get the actual port
 	endpoint, err := sub.GetLastEndpoint()
