@@ -415,7 +415,6 @@ var _ = Describe("KV cache", Ordered, func() {
 					Port:                  1234,
 					Model:                 "model",
 					KVCacheSize:           testCase.cacheSize,
-					ZMQEndpoint:           endpoint,
 					ZMQMaxConnectAttempts: 3,
 				}
 				blockCache, err := newBlockCache(&config, GinkgoLogr)
