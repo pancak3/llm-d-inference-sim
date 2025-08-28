@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/binary"
 
-	"net"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -96,28 +95,34 @@ var _ = Describe("Publisher", func() {
 		}
 	})
 	It("should retry connection successfully", func() {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			panic(err)
-		}
-		endpoint := "tcp://" + listener.Addr().String()
+		// Get ephemeral endpoint
+		sub, err := zmq.NewSocket(zmq.SUB)
+		Expect(err).NotTo(HaveOccurred())
+		err = sub.Bind(endpoint)
+		Expect(err).NotTo(HaveOccurred())
+		endpoint, err := sub.GetLastEndpoint()
+		Expect(err).NotTo(HaveOccurred())
+
 		// Step 1: Try to connect to a temporarily non-existent service
 		// This will trigger the retry mechanism
-		go func(listener net.Listener, endpoint string) {
+		go func(sub *zmq.Socket, endpoint string) {
+			// Delay releasing the ephemeral addr
+			time.Sleep(1950 * time.Millisecond)
+			err := sub.Close()
+			Expect(err).NotTo(HaveOccurred())
+
 			// Delay starting the server to simulate service recovery
 			time.Sleep(2 * time.Second)
 
 			// Start subscriber as server
-			sub, err := zmq.NewSocket(zmq.SUB)
+			sub, err = zmq.NewSocket(zmq.SUB)
 			Expect(err).NotTo(HaveOccurred())
 			//nolint
 			defer sub.Close()
-			err = listener.Close() // Free the port for ZMQ
 			Expect(err).NotTo(HaveOccurred())
 			err = sub.Bind(endpoint)
 			Expect(err).NotTo(HaveOccurred())
-		}(listener, endpoint)
-
+		}(sub, endpoint)
 		// Step 2: Publisher will retry connection and eventually succeed
 		pub, err := NewPublisher(endpoint, 5) // 5 retries
 		Expect(err).NotTo(HaveOccurred())     // Should eventually succeed
