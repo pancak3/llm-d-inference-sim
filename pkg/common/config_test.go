@@ -407,35 +407,24 @@ var _ = Describe("Simulator configuration", func() {
 				"--config", "../../manifests/config.yaml"},
 		},
 		{
-			name: "invalid (negative) prefill-overhead-std-dev",
-			args: []string{"cmd", "--prefill-overhead-std-dev", "-1",
+			name: "invalid (negative) prefill-time-per-token",
+			args: []string{"cmd", "--prefill-time-per-token", "-1",
 				"--config", "../../manifests/config.yaml"},
 		},
 		{
-			name: "<prefill-overhead> must be set when <prefill-complexity> is set",
-			args: []string{"cmd", "--prefill-complexity", "n^2", "--config", "../../manifests/config.yaml"},
-		},
-		{
-			name: "<prefill-complexity> should not be 'xxx'",
-			args: []string{"cmd", "--prefill-complexity", "xxx", "--config", "../../manifests/config.yaml"},
-		},
-		{
-			name: "invalid (negative) kv-cache-transfer-overhead",
-			args: []string{"cmd", "--kv-cache-transfer-overhead", "-1",
+			name: "invalid (negative) prefill-time-std-dev",
+			args: []string{"cmd", "--prefill-time-std-dev", "-1",
 				"--config", "../../manifests/config.yaml"},
 		},
 		{
-			name: "invalid (negative) kv-cache-transfer-overhead-std-dev",
-			args: []string{"cmd", "--kv-cache-transfer-overhead-std-dev", "-1",
+			name: "invalid (negative) kv-cache-transfer-time-per-token",
+			args: []string{"cmd", "--kv-cache-transfer-time-per-token", "-1",
 				"--config", "../../manifests/config.yaml"},
 		},
 		{
-			name: "<kv-cache-transfer-overhead> must be set when <kv-cache-transfer-complexity> is set",
-			args: []string{"cmd", "--kv-cache-transfer-complexity", "linear", "--config", "../../manifests/config.yaml"},
-		},
-		{
-			name: "<kv-cache-transfer-complexity> should not be 'xxx'",
-			args: []string{"cmd", "--kv-cache-transfer-complexity", "xxx", "--config", "../../manifests/config.yaml"},
+			name: "invalid (negative) kv-cache-transfer-time-std-dev",
+			args: []string{"cmd", "--kv-cache-transfer-time-std-dev", "-1",
+				"--config", "../../manifests/config.yaml"},
 		},
 	}
 
