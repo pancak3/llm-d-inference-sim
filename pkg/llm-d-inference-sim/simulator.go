@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net"
 	"os"
 	"strings"
@@ -655,13 +654,7 @@ func (s *VllmSimulator) sendResponse(isChatCompletion bool, ctx *fasthttp.Reques
 
 // returns time to first token based on the current request's doRemotePrefill
 func (s *VllmSimulator) getTimeToFirstToken(nPromptTokens int, doRemotePrefill bool) int {
-	if s.config.TimeToFirstToken == 0 && s.config.PrefillOverhead != 0 {
-		if nPromptTokens <= 1 {
-			if !doRemotePrefill {
-				return s.config.PrefillOverhead
-			}
-			return s.config.KVCacheTransferOverhead
-		}
+	if s.config.TimeToFirstToken == 0 {
 		return s.calcPrefillOverhead(nPromptTokens, doRemotePrefill)
 	}
 
@@ -695,34 +688,21 @@ func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int, doRemotePrefill b
 	if doRemotePrefill {
 		return s.calcRemotePrefillOverhead(nPromptTokens)
 	}
-	pfOverhead := s.config.PrefillOverhead
-	complexity := s.config.PrefillComplexity
-	// policies of different complexities of prefill implementation
-	overhead := 0
-	switch complexity {
-	case "n^2", "":
-		// this is simple implementation of n^2
-		overhead = pfOverhead * nPromptTokens * nPromptTokens
-	case "nlog(n)":
-		overhead = int(float64(pfOverhead) * (float64(nPromptTokens) * math.Log2(float64(nPromptTokens))))
-	}
-	return int(common.RandomNorm(float64(overhead), float64(s.config.PrefillOverheadStdDev)))
+
+	constOverhead := s.config.PrefillOverhead
+	ptpt := s.config.PrefillTimePerToken
+	prefillTime := constOverhead + nPromptTokens*ptpt
+
+	stdDev := s.config.PrefillTimeStdDev
+	return int(common.RandomNorm(float64(prefillTime), float64(stdDev)))
 }
 
 // calc the remote prefill overhead against number of tokens
 func (s *VllmSimulator) calcRemotePrefillOverhead(nPromptTokens int) int {
-	overhead := s.config.KVCacheTransferOverhead
-	complexity := s.config.KVCacheTransferComplexity
-	total := 0
-	switch complexity {
-	case "linear", "":
-		total = overhead * nPromptTokens
-	case "in-place":
-		// when the context is already filled
-		// this is a simple implementation which return a defined overhead
-		total = overhead
-	}
-	return int(common.RandomNorm(float64(total), float64(s.config.KVCacheTransferOverheadStdDev)))
+	kvCacheTransTPT := s.config.KVCacheTransferTimePerToken
+	kvCacheTransT := kvCacheTransTPT * nPromptTokens
+	stdDev := s.config.KVCacheTransferTimeStdDev
+	return int(common.RandomNorm(float64(kvCacheTransT), float64(stdDev)))
 }
 
 // createModelsResponse creates and returns ModelResponse for the current state, returned array of models contains the base model + LoRA adapters if exist
