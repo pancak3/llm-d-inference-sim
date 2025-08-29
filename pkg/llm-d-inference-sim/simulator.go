@@ -654,16 +654,18 @@ func (s *VllmSimulator) sendResponse(isChatCompletion bool, ctx *fasthttp.Reques
 
 // returns time to first token based on the current request's doRemotePrefill
 func (s *VllmSimulator) getTimeToFirstToken(nPromptTokens int, doRemotePrefill bool) int {
-	if s.config.TimeToFirstToken == 0 {
+	if s.config.TimeToFirstToken == 0 && s.config.TimeToFirstTokenStdDev == 0 {
 		return s.calcPrefillOverhead(nPromptTokens, doRemotePrefill)
 	}
 
-	mean := float64(s.config.TimeToFirstToken)
-	stddev := float64(s.config.TimeToFirstTokenStdDev)
-	if doRemotePrefill {
-		mean = float64(s.config.KVCacheTransferLatency)
-		stddev = float64(s.config.KVCacheTransferLatencyStdDev)
+	if !doRemotePrefill {
+		mean := float64(s.config.TimeToFirstToken)
+		stddev := float64(s.config.TimeToFirstTokenStdDev)
+		return int(common.RandomNorm(mean, stddev))
 	}
+
+	mean := float64(s.config.KVCacheTransferLatency)
+	stddev := float64(s.config.KVCacheTransferLatencyStdDev)
 	return int(common.RandomNorm(mean, stddev))
 }
 
@@ -685,22 +687,24 @@ func (s *VllmSimulator) getTotalInterTokenLatency(numOfTokens int) int {
 
 // calc the prefill overhead against number of tokens
 func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int, doRemotePrefill bool) int {
-	if doRemotePrefill {
-		return s.calcRemotePrefillOverhead(nPromptTokens)
+	if !doRemotePrefill {
+		constOverhead := s.config.PrefillOverhead
+		ptpt := s.config.PrefillTimePerToken
+		prefillTime := constOverhead + nPromptTokens*ptpt
+
+		stdDev := s.config.PrefillTimeStdDev
+		return int(common.RandomNorm(float64(prefillTime), float64(stdDev)))
 	}
 
-	constOverhead := s.config.PrefillOverhead
-	ptpt := s.config.PrefillTimePerToken
-	prefillTime := constOverhead + nPromptTokens*ptpt
+	if s.config.KVCacheTransferLatency != 0 || s.config.KVCacheTransferLatencyStdDev != 0 {
+		mean := float64(s.config.KVCacheTransferLatency)
+		stddev := float64(s.config.KVCacheTransferLatencyStdDev)
+		return int(common.RandomNorm(mean, stddev))
+	}
 
-	stdDev := s.config.PrefillTimeStdDev
-	return int(common.RandomNorm(float64(prefillTime), float64(stdDev)))
-}
-
-// calc the remote prefill overhead against number of tokens
-func (s *VllmSimulator) calcRemotePrefillOverhead(nPromptTokens int) int {
 	kvCacheTransTPT := s.config.KVCacheTransferTimePerToken
 	kvCacheTransT := kvCacheTransTPT * nPromptTokens
+
 	stdDev := s.config.KVCacheTransferTimeStdDev
 	return int(common.RandomNorm(float64(kvCacheTransT), float64(stdDev)))
 }

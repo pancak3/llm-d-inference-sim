@@ -881,7 +881,7 @@ var _ = Describe("Simulator", func() {
 			simulator.config.KVCacheTransferTimePerToken = 100
 			simulator.config.KVCacheTransferTimeStdDev = 0
 
-			ttft := simulator.getTimeToFirstToken(128, false)
+			ttft := simulator.getTimeToFirstToken(128, true)
 			Expect(ttft).To(BeNumerically("==", 200))
 		})
 
@@ -892,7 +892,7 @@ var _ = Describe("Simulator", func() {
 			simulator.config.KVCacheTransferTimePerToken = 100
 			simulator.config.KVCacheTransferTimeStdDev = 0
 
-			ttft := simulator.getTimeToFirstToken(128, false)
+			ttft := simulator.getTimeToFirstToken(128, true)
 			Expect(ttft).To(BeNumerically("==", 12800))
 		})
 
