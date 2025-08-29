@@ -26,7 +26,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/buaazp/fasthttprouter"
@@ -52,7 +51,24 @@ const (
 	namespaceHeader = "x-inference-namespace"
 	podNameEnv      = "POD_NAME"
 	podNsEnv        = "POD_NAMESPACE"
+
+	maxNumberOfRequests = 1000
 )
+
+type loraUsageState int
+
+const (
+	waitingUsageState loraUsageState = iota
+	runningUsageState
+	doneUsageState
+)
+
+type loraUsage struct {
+	// the lora adapter name
+	name string
+	// state of the lora usage - waiting/running/done
+	state loraUsageState
+}
 
 // VllmSimulator simulates vLLM server supporting OpenAI API
 type VllmSimulator struct {
@@ -62,15 +78,22 @@ type VllmSimulator struct {
 	config *common.Configuration
 	// loraAdaptors contains list of LoRA available adaptors
 	loraAdaptors sync.Map
-	// runningLoras is a collection of running loras, key of lora's name, value is number of requests using this lora
+	// runningLoras is a collection of running loras,
+	// the key is lora's name, the value is the number of running requests using this lora
 	runningLoras sync.Map
-	// waitingLoras will represent collection of loras defined in requests in the queue - Not implemented yet
-	// nolint:unused
+	// waitingLoras is a collection of waiting loras,
+	// the key is lora's name, the value is the number of waiting requests using this lora
 	waitingLoras sync.Map
+	// lorasChan is a channel to update waitingLoras and runningLoras
+	lorasChan chan loraUsage
 	// nRunningReqs is the number of inference requests that are currently being processed
 	nRunningReqs int64
+	// runReqChan is a channel to update nRunningReqs
+	runReqChan chan int64
 	// nWaitingReqs is the number of inference requests that are waiting to be processed
 	nWaitingReqs int64
+	// waitingReqChan is a channel to update nWaitingReqs
+	waitingReqChan chan int64
 	// loraInfo is prometheus gauge
 	loraInfo *prometheus.GaugeVec
 	// runningRequests is prometheus gauge
@@ -93,18 +116,21 @@ type VllmSimulator struct {
 
 // New creates a new VllmSimulator instance with the given logger
 func New(logger logr.Logger) (*VllmSimulator, error) {
-	toolsValidtor, err := openaiserverapi.CreateValidator()
+	toolsValidator, err := openaiserverapi.CreateValidator()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tools validator: %s", err)
 	}
 
 	return &VllmSimulator{
 		logger:         logger,
-		reqChan:        make(chan *openaiserverapi.CompletionReqCtx, 1000),
-		toolsValidator: toolsValidtor,
+		reqChan:        make(chan *openaiserverapi.CompletionReqCtx, maxNumberOfRequests),
+		toolsValidator: toolsValidator,
 		kvcacheHelper:  nil, // kvcache helper will be created only if required after reading configuration
 		namespace:      os.Getenv(podNsEnv),
 		pod:            os.Getenv(podNameEnv),
+		runReqChan:     make(chan int64, maxNumberOfRequests),
+		waitingReqChan: make(chan int64, maxNumberOfRequests),
+		lorasChan:      make(chan loraUsage, maxNumberOfRequests),
 	}, nil
 }
 
@@ -148,6 +174,9 @@ func (s *VllmSimulator) Start(ctx context.Context) error {
 	for i := 1; i <= s.config.MaxNumSeqs; i++ {
 		go s.reqProcessingWorker(ctx, i)
 	}
+
+	s.startMetricsUpdaters(ctx)
+
 	listener, err := s.newListener()
 	if err != nil {
 		return err
@@ -284,20 +313,20 @@ func (s *VllmSimulator) HandleUnloadLora(ctx *fasthttp.RequestCtx) {
 	s.unloadLora(ctx)
 }
 
-func (s *VllmSimulator) validateRequest(req openaiserverapi.CompletionRequest) (string, string, int) {
+func (s *VllmSimulator) validateRequest(req openaiserverapi.CompletionRequest) (string, int) {
 	if !s.isValidModel(req.GetModel()) {
-		return fmt.Sprintf("The model `%s` does not exist.", req.GetModel()), "NotFoundError", fasthttp.StatusNotFound
+		return fmt.Sprintf("The model `%s` does not exist.", req.GetModel()), fasthttp.StatusNotFound
 	}
 
 	if req.GetMaxCompletionTokens() != nil && *req.GetMaxCompletionTokens() <= 0 {
-		return "Max completion tokens and max tokens should be positive", "Invalid request", fasthttp.StatusBadRequest
+		return "Max completion tokens and max tokens should be positive", fasthttp.StatusBadRequest
 	}
 
 	if req.IsDoRemoteDecode() && req.IsStream() {
-		return "Prefill does not support streaming", "Invalid request", fasthttp.StatusBadRequest
+		return "Prefill does not support streaming", fasthttp.StatusBadRequest
 	}
 
-	return "", "", fasthttp.StatusOK
+	return "", fasthttp.StatusOK
 }
 
 // isValidModel checks if the given model is the base model or one of "loaded" LoRAs
@@ -329,6 +358,13 @@ func (s *VllmSimulator) isLora(model string) bool {
 
 // handleCompletions general completion requests handler, support both text and chat completion APIs
 func (s *VllmSimulator) handleCompletions(ctx *fasthttp.RequestCtx, isChatCompletion bool) {
+	// Check if we should inject a failure
+	if shouldInjectFailure(s.config) {
+		failure := getRandomFailure(s.config)
+		s.sendCompletionError(ctx, failure, true)
+		return
+	}
+
 	vllmReq, err := s.readRequest(ctx, isChatCompletion)
 	if err != nil {
 		s.logger.Error(err, "failed to read and parse request body")
@@ -336,9 +372,9 @@ func (s *VllmSimulator) handleCompletions(ctx *fasthttp.RequestCtx, isChatComple
 		return
 	}
 
-	errMsg, errType, errCode := s.validateRequest(vllmReq)
+	errMsg, errCode := s.validateRequest(vllmReq)
 	if errMsg != "" {
-		s.sendCompletionError(ctx, errMsg, errType, errCode)
+		s.sendCompletionError(ctx, openaiserverapi.NewCompletionError(errMsg, errCode, nil), false)
 		return
 	}
 
@@ -365,8 +401,9 @@ func (s *VllmSimulator) handleCompletions(ctx *fasthttp.RequestCtx, isChatComple
 	completionTokens := vllmReq.GetMaxCompletionTokens()
 	isValid, actualCompletionTokens, totalTokens := common.ValidateContextWindow(promptTokens, completionTokens, s.config.MaxModelLen)
 	if !isValid {
-		s.sendCompletionError(ctx, fmt.Sprintf("This model's maximum context length is %d tokens. However, you requested %d tokens (%d in the messages, %d in the completion). Please reduce the length of the messages or completion",
-			s.config.MaxModelLen, totalTokens, promptTokens, actualCompletionTokens), "BadRequestError", fasthttp.StatusBadRequest)
+		message := fmt.Sprintf("This model's maximum context length is %d tokens. However, you requested %d tokens (%d in the messages, %d in the completion). Please reduce the length of the messages or completion",
+			s.config.MaxModelLen, totalTokens, promptTokens, actualCompletionTokens)
+		s.sendCompletionError(ctx, openaiserverapi.NewCompletionError(message, fasthttp.StatusBadRequest, nil), false)
 		return
 	}
 
@@ -378,9 +415,14 @@ func (s *VllmSimulator) handleCompletions(ctx *fasthttp.RequestCtx, isChatComple
 		IsChatCompletion: isChatCompletion,
 		Wg:               &wg,
 	}
+	// increment the waiting requests metric
+	s.waitingReqChan <- 1
+	if s.isLora(reqCtx.CompletionReq.GetModel()) {
+		// update loraInfo metrics with the new waiting request
+		s.lorasChan <- loraUsage{reqCtx.CompletionReq.GetModel(), waitingUsageState}
+	}
+	// send the request to the waiting queue (channel)
 	s.reqChan <- reqCtx
-	atomic.StoreInt64(&(s.nWaitingReqs), int64(len(s.reqChan)))
-	s.reportWaitingRequests()
 	wg.Wait()
 }
 
@@ -395,32 +437,20 @@ func (s *VllmSimulator) reqProcessingWorker(ctx context.Context, id int) {
 				s.logger.Info("reqProcessingWorker worker exiting: reqChan closed")
 				return
 			}
-			atomic.StoreInt64(&(s.nWaitingReqs), int64(len(s.reqChan)))
-			s.reportWaitingRequests()
 
 			req := reqCtx.CompletionReq
 			model := req.GetModel()
 			displayModel := s.getDisplayedModelName(model)
 
+			// decriment waiting and increment running requests count
+			s.waitingReqChan <- -1
+			s.runReqChan <- 1
+
 			if s.isLora(model) {
-				// if current request's model is LoRA, add it to the list of running loras
-				value, ok := s.runningLoras.Load(model)
-				intValue := 0
-
-				if !ok {
-					s.logger.Info("Create reference counter", "model", model)
-					intValue = 0
-				} else {
-					intValue = value.(int)
-				}
-				s.runningLoras.Store(model, intValue+1)
-				s.logger.Info("Update LoRA reference counter", "model", model, "old value", intValue, "new value", intValue+1)
-
-				// TODO - check if this request went to the waiting queue - add it to waiting map
-				s.reportLoras()
+				// update loraInfo metric to reflect that
+				// the request has changed its status from waiting to running
+				s.lorasChan <- loraUsage{model, runningUsageState}
 			}
-			atomic.AddInt64(&(s.nRunningReqs), 1)
-			s.reportRunningRequests()
 
 			var responseTokens []string
 			var finishReason string
@@ -491,52 +521,35 @@ func (s *VllmSimulator) reqProcessingWorker(ctx context.Context, id int) {
 
 // decrease model usage reference number
 func (s *VllmSimulator) responseSentCallback(model string) {
+	// decriment running requests count
+	s.runReqChan <- -1
 
-	atomic.AddInt64(&(s.nRunningReqs), -1)
-	s.reportRunningRequests()
-
-	// Only LoRA models require reference-count handling.
-	if !s.isLora(model) {
-		return
+	if s.isLora(model) {
+		// update loraInfo metrics to reflect that the request processing has been finished
+		s.lorasChan <- loraUsage{model, doneUsageState}
 	}
-
-	value, ok := s.runningLoras.Load(model)
-
-	if !ok {
-		s.logger.Info("Error: nil reference counter", "model", model)
-		s.logger.Error(nil, "Zero model reference", "model", model)
-	} else {
-		intValue := value.(int)
-		if intValue > 1 {
-			s.runningLoras.Store(model, intValue-1)
-			s.logger.Info("Update LoRA reference counter", "model", model, "prev value", intValue, "new value", intValue-1)
-		} else {
-			// last lora instance stopped its execution - remove from the map
-			s.runningLoras.Delete(model)
-			s.logger.Info("Remove LoRA from set of running loras", "model", model)
-		}
-	}
-
-	s.reportLoras()
 }
 
 // sendCompletionError sends an error response for the current completion request
-func (s *VllmSimulator) sendCompletionError(ctx *fasthttp.RequestCtx, msg string, errType string, code int) {
-	compErr := openaiserverapi.CompletionError{
-		Object:  "error",
-		Message: msg,
-		Type:    errType,
-		Code:    code,
-		Param:   nil,
+// isInjected indicates if this is an injected failure for logging purposes
+func (s *VllmSimulator) sendCompletionError(ctx *fasthttp.RequestCtx,
+	compErr openaiserverapi.CompletionError, isInjected bool) {
+	if isInjected {
+		s.logger.Info("Injecting failure", "type", compErr.Type, "message", compErr.Message)
+	} else {
+		s.logger.Error(nil, compErr.Message)
 	}
-	s.logger.Error(nil, compErr.Message)
 
-	data, err := json.Marshal(compErr)
+	errorResp := openaiserverapi.ErrorResponse{
+		Error: compErr,
+	}
+
+	data, err := json.Marshal(errorResp)
 	if err != nil {
 		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
 	} else {
 		ctx.SetContentType("application/json")
-		ctx.SetStatusCode(code)
+		ctx.SetStatusCode(compErr.Code)
 		ctx.SetBody(data)
 	}
 }
