@@ -33,10 +33,10 @@ import (
 )
 
 const (
-	req1ID   = "req1"
-	req2ID   = "req2"
-	req3ID   = "req3"
-	endpoint = "tcp://*:*"
+	req1ID           = "req1"
+	req2ID           = "req2"
+	req3ID           = "req3"
+	wildcardEndpoint = "tcp://*:*"
 )
 
 type ActionType int
@@ -531,7 +531,7 @@ func createSub(config *common.Configuration) (*zmq.Socket, string) {
 	Expect(err).NotTo(HaveOccurred())
 	sub, err := zctx.NewSocket(zmq.SUB)
 	Expect(err).NotTo(HaveOccurred())
-	err = sub.Bind(endpoint)
+	err = sub.Bind(wildcardEndpoint)
 	Expect(err).NotTo(HaveOccurred())
 	// get the actual port
 	endpoint, err := sub.GetLastEndpoint()
