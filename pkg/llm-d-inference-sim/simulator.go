@@ -671,8 +671,7 @@ func (s *VllmSimulator) getTimeToFirstToken(nPromptTokens int, doRemotePrefill b
 		if s.config.KVCacheTransferLatency == 0 && s.config.KVCacheTransferLatencyStdDev == 0 {
 			// is disaggregated PD and ttft is calculated using number of prompt tokens
 			kvCacheTransT := s.config.KVCacheTransferTimePerToken * nPromptTokens
-			stdDev := s.config.KVCacheTransferTimeStdDev
-			return int(common.RandomNorm(float64(kvCacheTransT), float64(stdDev)))
+			return int(common.RandomNorm(float64(kvCacheTransT), float64(s.config.KVCacheTransferTimeStdDev)))
 		}
 		// is disaggregated PD and *not* using number of prompt tokens
 		return int(common.RandomNorm(float64(s.config.KVCacheTransferLatency), float64(s.config.KVCacheTransferLatencyStdDev)))
