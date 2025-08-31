@@ -701,22 +701,15 @@ func (s *VllmSimulator) getTotalInterTokenLatency(numOfTokens int) int {
 // calc the prefill overhead against number of tokens
 func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int, doRemotePrefill bool) int {
 	if !doRemotePrefill {
-		constOverhead := s.config.PrefillOverhead
-		ptpt := s.config.PrefillTimePerToken
-		prefillTime := constOverhead + nPromptTokens*ptpt
-
-		stdDev := s.config.PrefillTimeStdDev
-		return int(common.RandomNorm(float64(prefillTime), float64(stdDev)))
+		prefillTime := s.config.PrefillOverhead + nPromptTokens*s.config.PrefillTimePerToken
+		return int(common.RandomNorm(float64(prefillTime), float64(s.config.PrefillTimeStdDev)))
 	}
 
 	if s.config.KVCacheTransferLatency != 0 || s.config.KVCacheTransferLatencyStdDev != 0 {
-		mean := float64(s.config.KVCacheTransferLatency)
-		stddev := float64(s.config.KVCacheTransferLatencyStdDev)
-		return int(common.RandomNorm(mean, stddev))
+		return int(common.RandomNorm(float64(s.config.KVCacheTransferLatency), float64(s.config.KVCacheTransferLatencyStdDev)))
 	}
 
-	kvCacheTransTPT := s.config.KVCacheTransferTimePerToken
-	kvCacheTransT := kvCacheTransTPT * nPromptTokens
+	kvCacheTransT := s.config.KVCacheTransferTimePerToken * nPromptTokens
 
 	stdDev := s.config.KVCacheTransferTimeStdDev
 	return int(common.RandomNorm(float64(kvCacheTransT), float64(stdDev)))
