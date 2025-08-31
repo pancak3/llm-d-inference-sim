@@ -667,19 +667,23 @@ func (s *VllmSimulator) sendResponse(isChatCompletion bool, ctx *fasthttp.Reques
 
 // returns time to first token based on the current request's doRemotePrefill
 func (s *VllmSimulator) getTimeToFirstToken(nPromptTokens int, doRemotePrefill bool) int {
+	if doRemotePrefill {
+		if s.config.KVCacheTransferLatency == 0 && s.config.KVCacheTransferLatencyStdDev == 0 {
+			// is disaggregated PD and ttft is calculated using number of prompt tokens
+			kvCacheTransT := s.config.KVCacheTransferTimePerToken * nPromptTokens
+			stdDev := s.config.KVCacheTransferTimeStdDev
+			return int(common.RandomNorm(float64(kvCacheTransT), float64(stdDev)))
+		}
+		// is disaggregated PD and *not* using number of prompt tokens
+		return int(common.RandomNorm(float64(s.config.KVCacheTransferLatency), float64(s.config.KVCacheTransferLatencyStdDev)))
+	}
 	if s.config.TimeToFirstToken == 0 && s.config.TimeToFirstTokenStdDev == 0 {
-		return s.calcPrefillOverhead(nPromptTokens, doRemotePrefill)
+		// is aggregated PD and ttft is calculated using number of prompt tokens
+		prefillTime := s.config.PrefillOverhead + nPromptTokens*s.config.PrefillTimePerToken
+		return int(common.RandomNorm(float64(prefillTime), float64(s.config.PrefillTimeStdDev)))
 	}
-
-	if !doRemotePrefill {
-		mean := float64(s.config.TimeToFirstToken)
-		stddev := float64(s.config.TimeToFirstTokenStdDev)
-		return int(common.RandomNorm(mean, stddev))
-	}
-
-	mean := float64(s.config.KVCacheTransferLatency)
-	stddev := float64(s.config.KVCacheTransferLatencyStdDev)
-	return int(common.RandomNorm(mean, stddev))
+	// is aggregated PD and *not* using number of prompt tokens
+	return int(common.RandomNorm(float64(s.config.TimeToFirstToken), float64(s.config.TimeToFirstTokenStdDev)))
 }
 
 // returns inter token latency
@@ -696,23 +700,6 @@ func (s *VllmSimulator) getTotalInterTokenLatency(numOfTokens int) int {
 		total += s.getInterTokenLatency()
 	}
 	return total
-}
-
-// calc the prefill overhead against number of tokens
-func (s *VllmSimulator) calcPrefillOverhead(nPromptTokens int, doRemotePrefill bool) int {
-	if !doRemotePrefill {
-		prefillTime := s.config.PrefillOverhead + nPromptTokens*s.config.PrefillTimePerToken
-		return int(common.RandomNorm(float64(prefillTime), float64(s.config.PrefillTimeStdDev)))
-	}
-
-	if s.config.KVCacheTransferLatency != 0 || s.config.KVCacheTransferLatencyStdDev != 0 {
-		return int(common.RandomNorm(float64(s.config.KVCacheTransferLatency), float64(s.config.KVCacheTransferLatencyStdDev)))
-	}
-
-	kvCacheTransT := s.config.KVCacheTransferTimePerToken * nPromptTokens
-
-	stdDev := s.config.KVCacheTransferTimeStdDev
-	return int(common.RandomNorm(float64(kvCacheTransT), float64(stdDev)))
 }
 
 // createModelsResponse creates and returns ModelResponse for the current state, returned array of models contains the base model + LoRA adapters if exist
