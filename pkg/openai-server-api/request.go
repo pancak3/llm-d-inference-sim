@@ -59,7 +59,7 @@ type CompletionRequest interface {
 	GetToolChoice() string
 	// GetMaxCompletionTokens returns the maximum completion tokens requested
 	GetMaxCompletionTokens() *int64
-	// GetIgnoreEOS returns true if the end of sequence will be ignored
+	// GetIgnoreEOS returns true if the end-of-sequence tokens will be ignored
 	GetIgnoreEOS() bool
 	// IsDoRemoteDecode() returns true if do_remote_decode field is true in the request,
 	// when the field is true, the decode phase should be done on remote pod,
@@ -95,6 +95,8 @@ type baseCompletionRequest struct {
 	RemotePort int `json:"remote_port"`
 	// The number of tokens in the prompt that are in the local KV Cache
 	cachedPromptTokens int
+	// IgnoreEOS is a boolean value, true when the model should ignore end-of-sequence tokens
+	IgnoreEOS bool `json:"ignore_eos"`
 }
 
 // StreamOptions defines streaming options for streaming requests
@@ -133,6 +135,11 @@ func (b *baseCompletionRequest) GetNumberOfCachedPromptTokens() int {
 	return b.cachedPromptTokens
 }
 
+// GetIgnoreEOS returns the value of IgnoreEOS
+func (b *baseCompletionRequest) GetIgnoreEOS() bool {
+	return b.IgnoreEOS
+}
+
 // SetNumberOfCachedPromptTokens sets the number of tokens in the prompt that are
 // in the local KV Cache
 func (b *baseCompletionRequest) SetNumberOfCachedPromptTokens(cachedPromptTokens int) {
@@ -165,9 +172,6 @@ type ChatCompletionRequest struct {
 	// generated for a completion, including visible output
 	// tokens and reasoning tokens.
 	MaxCompletionTokens *int64 `json:"max_completion_tokens"`
-
-	// IgnoreEOS is a boolean value, true when the model should ignore end-of-sequence tokens
-	IgnoreEOS bool `json:"ignore_eos"` // Field remains unchanged
 
 	// Tools is a list of tools the model may call.
 	Tools []Tool `json:"tools,omitempty"`
@@ -224,10 +228,6 @@ func (c *ChatCompletionRequest) GetMaxCompletionTokens() *int64 {
 	return c.MaxTokens
 }
 
-func (c *ChatCompletionRequest) GetIgnoreEOS() bool {
-	return c.IgnoreEOS
-}
-
 // getLastUserMsg returns last message from this request's messages with user role,
 // if does not exist - returns an empty string
 func (req *ChatCompletionRequest) getLastUserMsg() string {
@@ -273,9 +273,6 @@ type TextCompletionRequest struct {
 	// The token count of your prompt plus `max_tokens` cannot exceed the model's
 	// context length.
 	MaxTokens *int64 `json:"max_tokens"`
-
-	// IgnoreEOS is a boolean value, true when the model should ignore end-of-sequence tokens
-	IgnoreEOS bool `json:"ignore_eos"`
 }
 
 func (t *TextCompletionRequest) GetPrompt() string {
@@ -296,10 +293,6 @@ func (c *TextCompletionRequest) GetToolChoice() string {
 
 func (c *TextCompletionRequest) GetMaxCompletionTokens() *int64 {
 	return c.MaxTokens
-}
-
-func (c *TextCompletionRequest) GetIgnoreEOS() bool {
-	return c.IgnoreEOS
 }
 
 // CreateResponseText creates and returns response payload based on this request,
