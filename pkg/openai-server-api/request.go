@@ -253,7 +253,7 @@ func (req ChatCompletionRequest) CreateResponseText(mode string) ([]string, stri
 	if mode == common.ModeEcho {
 		text, finishReason = common.GetResponseText(maxTokens, req.getLastUserMsg())
 	} else {
-		text, finishReason = common.GetRandomResponseText(maxTokens)
+		text, finishReason = common.GetRandomResponseText(maxTokens, req.GetIgnoreEOS())
 	}
 
 	tokens := common.Tokenize(text)
@@ -315,7 +315,7 @@ func (req TextCompletionRequest) CreateResponseText(mode string) ([]string, stri
 	if mode == common.ModeEcho {
 		text, finishReason = common.GetResponseText(maxTokens, req.Prompt)
 	} else {
-		text, finishReason = common.GetRandomResponseText(maxTokens)
+		text, finishReason = common.GetRandomResponseText(maxTokens, req.GetIgnoreEOS())
 	}
 
 	tokens := common.Tokenize(text)
