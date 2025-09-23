@@ -18,7 +18,9 @@ limitations under the License.
 package openaiserverapi
 
 import (
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/llm-d/llm-d-inference-sim/pkg/common"
 	"github.com/valyala/fasthttp"
@@ -28,6 +30,15 @@ const (
 	RoleAssistant = "assistant"
 	RoleUser      = "user"
 )
+
+// Times contains timing information for request processing
+type Times struct {
+	ClientSentAt     int64 `json:"client_sent_at"`
+	ServerReceivedAt int64 `json:"server_received_at"`
+	ServerStartedAt  int64 `json:"server_started_at"`
+	// Time taken from ServerStartedAt to each token
+	TokenTimes []int64 `json:"token_times"`
+}
 
 // CompletionRequest interface representing both completion request types (text and chat)
 type CompletionRequest interface {
@@ -67,6 +78,16 @@ type CompletionRequest interface {
 	IsDoRemotePrefill() bool
 	// GetFullPrompt returns the full prompt including system and user prompts
 	GetFullPrompt() string
+	// SetServerReceivedAt sets the server received timestamp
+	SetServerReceivedAt()
+	// SetServerStartedAt sets the server started processing timestamp
+	SetServerStartedAt()
+	// AddTokenTime adds a token generation time
+	AddTokenTime()
+	// GetTimes returns the timing information
+	GetTimes() *Times
+	// CalcTimes calculates the timing information
+	CalcTimes()
 }
 
 // BaseCompletionRequest contains base completion request related information
@@ -95,6 +116,8 @@ type BaseCompletionRequest struct {
 	cachedPromptTokens int
 	// IgnoreEOS is a boolean value, true when the model should ignore end-of-sequence tokens
 	IgnoreEOS bool `json:"ignore_eos"`
+	// Times contains timestamps related to the request processing
+	Times *Times `json:"times,omitempty"`
 }
 
 // StreamOptions defines streaming options for streaming requests
@@ -142,6 +165,66 @@ func (b *BaseCompletionRequest) GetIgnoreEOS() bool {
 // in the local KV Cache
 func (b *BaseCompletionRequest) SetNumberOfCachedPromptTokens(cachedPromptTokens int) {
 	b.cachedPromptTokens = cachedPromptTokens
+}
+
+// GetTimes returns the timing information
+func (b *BaseCompletionRequest) GetTimes() *Times {
+	return b.Times
+}
+
+// SetServerReceivedAt sets the server received timestamp
+func (b *BaseCompletionRequest) SetServerReceivedAt() {
+	if b.Times == nil {
+		b.Times = &Times{}
+	}
+	b.Times.ServerReceivedAt = time.Now().UnixMicro()
+}
+
+// SetServerStartedAt sets the server started processing timestamp
+func (b *BaseCompletionRequest) SetServerStartedAt() {
+	if b.Times == nil {
+		b.Times = &Times{}
+	}
+	b.Times.ServerStartedAt = time.Now().UnixMicro()
+}
+
+// AddTokenTime adds a token generation time
+func (b *BaseCompletionRequest) AddTokenTime() {
+	if b.Times == nil {
+		b.Times = &Times{}
+	}
+	if b.Times.TokenTimes == nil {
+		b.Times.TokenTimes = []int64{}
+	}
+	b.Times.TokenTimes = append(b.Times.TokenTimes, time.Now().UnixMicro())
+}
+
+func (b *BaseCompletionRequest) CalcTimes() {
+	if b.Times == nil {
+		return
+	}
+	if b.Times.TokenTimes == nil {
+		return
+	}
+	// loop from back to front of TokenTimes and convert to deltas
+	for i := len(b.Times.TokenTimes) - 1; i > 0; i-- {
+		b.Times.TokenTimes[i] -= b.Times.TokenTimes[i-1]
+	}
+	if len(b.Times.TokenTimes) > 0 {
+		b.Times.TokenTimes[0] -= b.Times.ServerStartedAt
+	}
+	b.Times.ServerStartedAt -= b.Times.ServerReceivedAt
+	b.Times.ServerReceivedAt = 0
+
+	fmt.Printf("Times for request %s: server_received_at: %d, server_started_at: %d, token_times (micro seconds): [",
+		b.GetRequestID(), b.Times.ServerReceivedAt, b.Times.ServerStartedAt)
+	for i, tokenTime := range b.Times.TokenTimes {
+		fmt.Printf("%d", tokenTime)
+		if i < len(b.Times.TokenTimes)-1 {
+			fmt.Printf(", ")
+		}
+	}
+	fmt.Printf("]\n")
 }
 
 // CompletionReqCtx is a context passed in the simulator's flow, it contains the request data needed

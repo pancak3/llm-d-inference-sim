@@ -44,7 +44,7 @@ type streamingContext struct {
 // response content is wrapped according SSE format
 // First token is send after timeToFirstToken milliseconds, every other token is sent after interTokenLatency milliseconds
 func (s *VllmSimulator) sendStreamingResponse(context *streamingContext, responseTokens []string, toolCalls []openaiserverapi.ToolCall,
-	finishReason string, usageData *openaiserverapi.Usage) {
+	finishReason string, usageData *openaiserverapi.Usage, req openaiserverapi.CompletionRequest) {
 	context.ctx.SetContentType("text/event-stream")
 	context.ctx.SetStatusCode(fasthttp.StatusOK)
 
@@ -71,11 +71,11 @@ func (s *VllmSimulator) sendStreamingResponse(context *streamingContext, respons
 			if len(toolCalls) > 0 {
 				s.logger.Info("Going to send tools calls")
 				for _, tc := range toolCalls {
-					s.sendTokenChunks(context, w, tc.Function.TokenizedArguments, &tc, finishReason)
+					s.sendTokenChunks(context, w, tc.Function.TokenizedArguments, &tc, finishReason, req)
 				}
 			} else {
 				s.logger.Info("Going to send text", "number of tokens", len(responseTokens))
-				s.sendTokenChunks(context, w, responseTokens, nil, finishReason)
+				s.sendTokenChunks(context, w, responseTokens, nil, finishReason, req)
 			}
 		}
 
@@ -99,14 +99,16 @@ func (s *VllmSimulator) sendStreamingResponse(context *streamingContext, respons
 
 // sendTokenChunks creates and sends response chunks
 func (s *VllmSimulator) sendTokenChunks(context *streamingContext, w *bufio.Writer, genTokens []string,
-	tc *openaiserverapi.ToolCall, finishReason string) {
+	tc *openaiserverapi.ToolCall, finishReason string, req openaiserverapi.CompletionRequest) {
+	req.SetServerStartedAt()
 	// time to first token delay
 	ttft := s.getWaitTimeToFirstToken(context.nPromptTokens, context.nCachedPromptTokens, context.doRemotePrefill)
 	time.Sleep(time.Duration(ttft) * time.Millisecond)
-
+	req.AddTokenTime()
 	for i, token := range genTokens {
 		if i != 0 {
 			time.Sleep(time.Duration(s.getInterTokenLatency()) * time.Millisecond)
+			req.AddTokenTime()
 		}
 		var toolChunkInsert *openaiserverapi.ToolCall
 		if tc != nil {
@@ -153,6 +155,7 @@ func (s *VllmSimulator) sendTokenChunks(context *streamingContext, w *bufio.Writ
 			return
 		}
 	}
+	req.CalcTimes()
 }
 
 // createUsageChunk creates and returns a CompletionRespChunk with usage data, a single chunk of streamed completion API response,

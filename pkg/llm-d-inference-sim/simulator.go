@@ -327,6 +327,7 @@ func (s *VllmSimulator) reqProcessingWorker(ctx context.Context, id int) {
 			}
 
 			req := reqCtx.CompletionReq
+			req.SetServerReceivedAt()
 			model := req.GetModel()
 			displayModel := s.getDisplayedModelName(model)
 
@@ -394,7 +395,7 @@ func (s *VllmSimulator) reqProcessingWorker(ctx context.Context, id int) {
 							nPromptTokens:       usageData.PromptTokens,
 							nCachedPromptTokens: reqCtx.CompletionReq.GetNumberOfCachedPromptTokens(),
 						},
-						responseTokens, toolCalls, finishReason, usageDataToSend,
+						responseTokens, toolCalls, finishReason, usageDataToSend, req,
 					)
 				} else {
 					if req.IsDoRemoteDecode() {
@@ -495,16 +496,19 @@ func (s *VllmSimulator) sendResponse(reqCtx *openaiserverapi.CompletionReqCtx, r
 
 	// calculate how long to wait before returning the response, time is based on number of tokens
 	nCachedPromptTokens := reqCtx.CompletionReq.GetNumberOfCachedPromptTokens()
+	reqCtx.CompletionReq.SetServerStartedAt()
 	ttft := s.getWaitTimeToFirstToken(usageData.PromptTokens, nCachedPromptTokens, reqCtx.CompletionReq.IsDoRemotePrefill())
 	time.Sleep(time.Duration(ttft) * time.Millisecond)
+	reqCtx.CompletionReq.AddTokenTime()
 	for range usageData.CompletionTokens - 1 {
 		perTokenLatency := s.getInterTokenLatency()
 		time.Sleep(time.Duration(perTokenLatency) * time.Millisecond)
+		reqCtx.CompletionReq.AddTokenTime()
 	}
 
 	s.sendCompletionResponse(reqCtx.HTTPReqCtx, resp)
-
 	s.responseSentCallback(modelName, reqCtx.IsChatCompletion, reqCtx.CompletionReq.GetRequestID())
+	reqCtx.CompletionReq.CalcTimes()
 }
 
 // createModelsResponse creates and returns ModelResponse for the current state, returned array of models contains the base model + LoRA adapters if exist

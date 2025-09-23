@@ -52,6 +52,8 @@ type BaseCompletionResponse struct {
 	RemoteHost string `json:"remote_host"`
 	// RemotePort is a port of the remote server handling prefill
 	RemotePort int `json:"remote_port"`
+	// Times contains timing information related to request processing
+	Times *Times `json:"times,omitempty"`
 }
 
 // Usage contains token Usage statistics
