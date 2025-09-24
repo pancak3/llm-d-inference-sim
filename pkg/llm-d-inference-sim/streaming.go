@@ -155,6 +155,7 @@ func (s *VllmSimulator) sendTokenChunks(context *streamingContext, w *bufio.Writ
 			return
 		}
 	}
+	req.SetServerSentAt()
 	req.CalcTimes()
 }
 

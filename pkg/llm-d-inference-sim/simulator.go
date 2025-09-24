@@ -507,6 +507,7 @@ func (s *VllmSimulator) sendResponse(reqCtx *openaiserverapi.CompletionReqCtx, r
 	}
 
 	s.sendCompletionResponse(reqCtx.HTTPReqCtx, resp)
+	reqCtx.CompletionReq.SetServerSentAt()
 	s.responseSentCallback(modelName, reqCtx.IsChatCompletion, reqCtx.CompletionReq.GetRequestID())
 	reqCtx.CompletionReq.CalcTimes()
 }
