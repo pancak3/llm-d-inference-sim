@@ -302,6 +302,10 @@ func newConfig() *Configuration {
 		ZMQEndpoint:    "tcp://localhost:5557",
 		EventBatchSize: 16,
 		DPSize:         1,
+		Dataset: DatasetConf{
+			Path: "",
+			URL:  "",
+		},
 	}
 }
 

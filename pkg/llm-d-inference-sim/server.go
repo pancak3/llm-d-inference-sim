@@ -111,7 +111,6 @@ func (s *VllmSimulator) readRequest(ctx *fasthttp.RequestCtx, isChatCompletion b
 
 	if isChatCompletion {
 		var req openaiserverapi.ChatCompletionRequest
-
 		err := json.Unmarshal(ctx.Request.Body(), &req)
 		if err != nil {
 			s.logger.Error(err, "failed to unmarshal request body")

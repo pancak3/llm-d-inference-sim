@@ -37,8 +37,9 @@ type Times struct {
 	ServerReceivedAt int64 `json:"server_received_at"`
 	ServerStartedAt  int64 `json:"server_started_at"`
 	// Time taken from ServerStartedAt to each token
-	TokenTimes   []int64 `json:"token_times"`
-	ServerSentAt int64   `json:"server_sent_at"`
+	TokenTimes      []int64 `json:"token_times"`
+	ServerRespondedAt int64   `json:"server_responded_at"`
+	HasCreatedLogFile bool
 }
 
 // CompletionRequest interface representing both completion request types (text and chat)
@@ -89,8 +90,8 @@ type CompletionRequest interface {
 	GetTimes() *Times
 	// CalcTimes calculates the timing information
 	CalcTimes()
-	// SetServerSentAt sets the server sent timestamp
-	SetServerSentAt()
+	// SetServerRespondedAt sets the server responded timestamp
+	SetServerRespondedAt()
 }
 
 // BaseCompletionRequest contains base completion request related information
@@ -121,6 +122,8 @@ type BaseCompletionRequest struct {
 	IgnoreEOS bool `json:"ignore_eos"`
 	// Times contains timestamps related to the request processing
 	Times *Times `json:"times,omitempty"`
+	// ClientSideID is an optional client side ID for correlating requests and responses
+	ClientSideID string `json:"client_side_id,omitempty"`
 }
 
 // StreamOptions defines streaming options for streaming requests
@@ -191,11 +194,11 @@ func (b *BaseCompletionRequest) SetServerStartedAt() {
 	b.Times.ServerStartedAt = time.Now().UnixMicro()
 }
 
-func (b *BaseCompletionRequest) SetServerSentAt() {
+func (b *BaseCompletionRequest) SetServerRespondedAt() {
 	if b.Times == nil {
 		b.Times = &Times{}
 	}
-	b.Times.ServerSentAt = time.Now().UnixMicro()
+	b.Times.ServerRespondedAt = time.Now().UnixMicro()
 }
 
 // AddTokenTime adds a token generation time
@@ -224,11 +227,11 @@ func (b *BaseCompletionRequest) CalcTimes() {
 		b.Times.TokenTimes[0] -= b.Times.ServerStartedAt
 	}
 	b.Times.ServerStartedAt -= b.Times.ServerReceivedAt
-	b.Times.ServerSentAt -= b.Times.ServerReceivedAt
+	b.Times.ServerRespondedAt -= b.Times.ServerReceivedAt
 	b.Times.ServerReceivedAt = 0
 
-	fmt.Printf("Times for request %s: server_received_at: %d, server_started_at: %d, token_times (micro seconds): [",
-		b.GetRequestID(), b.Times.ServerReceivedAt, b.Times.ServerStartedAt)
+	fmt.Printf("\tTimes for request: %s\n\tserver_received_at: %d\n\tserver_started_at: %d\n\tserver_responded_at: %d\n\ttoken_times (micro seconds): [",
+		b.ClientSideID, b.Times.ServerReceivedAt, b.Times.ServerStartedAt, b.Times.ServerRespondedAt)
 	for i, tokenTime := range b.Times.TokenTimes {
 		fmt.Printf("%d", tokenTime)
 		if i < len(b.Times.TokenTimes)-1 {
@@ -236,6 +239,9 @@ func (b *BaseCompletionRequest) CalcTimes() {
 		}
 	}
 	fmt.Printf("]\n")
+
+	
+
 }
 
 // CompletionReqCtx is a context passed in the simulator's flow, it contains the request data needed

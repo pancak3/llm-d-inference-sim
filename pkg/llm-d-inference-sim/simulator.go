@@ -353,6 +353,8 @@ func (s *VllmSimulator) reqProcessingWorker(ctx context.Context, id int) {
 			var err error
 			var toolCalls []openaiserverapi.ToolCall
 			var completionTokens int
+			req.SetServerStartedAt()
+
 			if reqCtx.IsChatCompletion &&
 				req.GetToolChoice() != openaiserverapi.ToolChoiceNone &&
 				req.GetTools() != nil {
@@ -496,7 +498,6 @@ func (s *VllmSimulator) sendResponse(reqCtx *openaiserverapi.CompletionReqCtx, r
 
 	// calculate how long to wait before returning the response, time is based on number of tokens
 	nCachedPromptTokens := reqCtx.CompletionReq.GetNumberOfCachedPromptTokens()
-	reqCtx.CompletionReq.SetServerStartedAt()
 	ttft := s.getWaitTimeToFirstToken(usageData.PromptTokens, nCachedPromptTokens, reqCtx.CompletionReq.IsDoRemotePrefill())
 	time.Sleep(time.Duration(ttft) * time.Millisecond)
 	reqCtx.CompletionReq.AddTokenTime()
@@ -507,7 +508,7 @@ func (s *VllmSimulator) sendResponse(reqCtx *openaiserverapi.CompletionReqCtx, r
 	}
 
 	s.sendCompletionResponse(reqCtx.HTTPReqCtx, resp)
-	reqCtx.CompletionReq.SetServerSentAt()
+	reqCtx.CompletionReq.SetServerRespondedAt()
 	s.responseSentCallback(modelName, reqCtx.IsChatCompletion, reqCtx.CompletionReq.GetRequestID())
 	reqCtx.CompletionReq.CalcTimes()
 }
