@@ -38,10 +38,10 @@ const (
 
 var (
 	// csvFile and csvWriter for logging timing data
-	csvFile   *os.File
-	csvWriter *csv.Writer
-	csvMutex  sync.Mutex
-	csvLogDir = "log"
+	csvFile    *os.File
+	csvWriter  *csv.Writer
+	csvMutex   sync.Mutex
+	csvLogDir  = "/root/.llm-d/log"
 	csvLogFile = "times.log.csv"
 )
 
@@ -51,7 +51,7 @@ type Times struct {
 	ServerReceivedAt int64 `json:"server_received_at"`
 	ServerStartedAt  int64 `json:"server_started_at"`
 	// Time taken from ServerStartedAt to each token
-	TokenTimes      []int64 `json:"token_times"`
+	TokenTimes        []int64 `json:"token_times"`
 	ServerRespondedAt int64   `json:"server_responded_at"`
 	HasCreatedLogFile bool
 }
@@ -267,9 +267,13 @@ func initCSVLogger() error {
 	if err := os.MkdirAll(csvLogDir, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
+	// get /etc/hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("failed to get hostname: %w", err)
+	}
+	csvPath := filepath.Join(csvLogDir, fmt.Sprintf("%s_%s", hostname, csvLogFile))
 
-	csvPath := filepath.Join(csvLogDir, csvLogFile)
-	
 	// Check if file exists and backup if needed
 	if _, err := os.Stat(csvPath); err == nil {
 		// File exists, create backup with timestamp
@@ -288,18 +292,21 @@ func initCSVLogger() error {
 	}
 
 	writer := csv.NewWriter(file)
-	
+
 	// Write CSV header
 	header := []string{"client_side_id", "server_received_at", "server_started_at", "server_responded_at", "token_times"}
 	if err := writer.Write(header); err != nil {
-		file.Close()
+		err = file.Close()
+		if err != nil {
+			fmt.Printf("failed to close CSV file after write error: %v\n", err)
+		}
 		return fmt.Errorf("failed to write CSV header: %w", err)
 	}
 	writer.Flush()
 
 	csvFile = file
 	csvWriter = writer
-	
+
 	fmt.Printf("Initialized new CSV log file: %s\n", csvPath)
 	return nil
 }
@@ -353,7 +360,10 @@ func CloseCSVLogger() {
 		csvWriter = nil
 	}
 	if csvFile != nil {
-		csvFile.Close()
+		err := csvFile.Close()
+		if err != nil {
+			fmt.Printf("failed to close CSV file: %v\n", err)
+		}
 		csvFile = nil
 	}
 }
