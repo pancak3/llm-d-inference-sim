@@ -18,7 +18,12 @@ limitations under the License.
 package openaiserverapi
 
 import (
+	"encoding/csv"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +34,15 @@ import (
 const (
 	RoleAssistant = "assistant"
 	RoleUser      = "user"
+)
+
+var (
+	// csvFile and csvWriter for logging timing data
+	csvFile   *os.File
+	csvWriter *csv.Writer
+	csvMutex  sync.Mutex
+	csvLogDir = "log"
+	csvLogFile = "times.log.csv"
 )
 
 // Times contains timing information for request processing
@@ -230,18 +244,118 @@ func (b *BaseCompletionRequest) CalcTimes() {
 	b.Times.ServerRespondedAt -= b.Times.ServerReceivedAt
 	b.Times.ServerReceivedAt = 0
 
-	fmt.Printf("\tTimes for request: %s\n\tserver_received_at: %d\n\tserver_started_at: %d\n\tserver_responded_at: %d\n\ttoken_times (micro seconds): [",
-		b.ClientSideID, b.Times.ServerReceivedAt, b.Times.ServerStartedAt, b.Times.ServerRespondedAt)
-	for i, tokenTime := range b.Times.TokenTimes {
-		fmt.Printf("%d", tokenTime)
-		if i < len(b.Times.TokenTimes)-1 {
-			fmt.Printf(", ")
+	// fmt.Printf("\tTimes for request: %s\n\tserver_received_at: %d\n\tserver_started_at: %d\n\tserver_responded_at: %d\n\ttoken_times (micro seconds): [",
+	// 	b.ClientSideID, b.Times.ServerReceivedAt, b.Times.ServerStartedAt, b.Times.ServerRespondedAt)
+	// for i, tokenTime := range b.Times.TokenTimes {
+	// 	fmt.Printf("%d", tokenTime)
+	// 	if i < len(b.Times.TokenTimes)-1 {
+	// 		fmt.Printf(", ")
+	// 	}
+	// }
+	// fmt.Printf("]\n")
+
+	// Log to CSV file
+	if err := logTimesToCSV(b.ClientSideID, b.Times.ServerReceivedAt, b.Times.ServerStartedAt, b.Times.ServerRespondedAt, b.Times.TokenTimes); err != nil {
+		fmt.Printf("Error logging to CSV: %v\n", err)
+	}
+}
+
+// initCSVLogger initializes the CSV logger, backing up existing file if needed
+// Note: This function assumes csvMutex is already locked by the caller
+func initCSVLogger() error {
+	// Create log directory if it doesn't exist
+	if err := os.MkdirAll(csvLogDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
+	}
+
+	csvPath := filepath.Join(csvLogDir, csvLogFile)
+	
+	// Check if file exists and backup if needed
+	if _, err := os.Stat(csvPath); err == nil {
+		// File exists, create backup with timestamp
+		timestamp := time.Now().Format("20060102_150405")
+		backupPath := filepath.Join(csvLogDir, fmt.Sprintf("times.log.%s.csv", timestamp))
+		if err := os.Rename(csvPath, backupPath); err != nil {
+			return fmt.Errorf("failed to backup existing CSV file: %w", err)
+		}
+		fmt.Printf("Backed up existing CSV file to: %s\n", backupPath)
+	}
+
+	// Create new CSV file
+	file, err := os.Create(csvPath)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+
+	writer := csv.NewWriter(file)
+	
+	// Write CSV header
+	header := []string{"client_side_id", "server_received_at", "server_started_at", "server_responded_at", "token_times"}
+	if err := writer.Write(header); err != nil {
+		file.Close()
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
+	writer.Flush()
+
+	csvFile = file
+	csvWriter = writer
+	
+	fmt.Printf("Initialized new CSV log file: %s\n", csvPath)
+	return nil
+}
+
+// logTimesToCSV logs timing data to the CSV file
+func logTimesToCSV(clientSideID string, serverReceivedAt, serverStartedAt, serverRespondedAt int64, tokenTimes []int64) error {
+	csvMutex.Lock()
+	defer csvMutex.Unlock()
+
+	// Initialize CSV logger if not already done
+	if csvFile == nil {
+		if err := initCSVLogger(); err != nil {
+			return fmt.Errorf("failed to initialize CSV logger: %w", err)
 		}
 	}
-	fmt.Printf("]\n")
 
-	
+	// Convert token times to comma-separated string
+	tokenTimesStr := ""
+	if len(tokenTimes) > 0 {
+		tokenTimesStrs := make([]string, len(tokenTimes))
+		for i, tokenTime := range tokenTimes {
+			tokenTimesStrs[i] = strconv.FormatInt(tokenTime, 10)
+		}
+		tokenTimesStr = "[" + strings.Join(tokenTimesStrs, ",") + "]"
+	}
 
+	// Write the record
+	record := []string{
+		clientSideID,
+		strconv.FormatInt(serverReceivedAt, 10),
+		strconv.FormatInt(serverStartedAt, 10),
+		strconv.FormatInt(serverRespondedAt, 10),
+		tokenTimesStr,
+	}
+
+	if err := csvWriter.Write(record); err != nil {
+		return fmt.Errorf("failed to write CSV record: %w", err)
+	}
+	csvWriter.Flush()
+
+	return nil
+}
+
+// CloseCSVLogger closes the CSV file and writer
+func CloseCSVLogger() {
+	csvMutex.Lock()
+	defer csvMutex.Unlock()
+
+	if csvWriter != nil {
+		csvWriter.Flush()
+		csvWriter = nil
+	}
+	if csvFile != nil {
+		csvFile.Close()
+		csvFile = nil
+	}
 }
 
 // CompletionReqCtx is a context passed in the simulator's flow, it contains the request data needed
