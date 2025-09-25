@@ -255,7 +255,7 @@ func (b *BaseCompletionRequest) CalcTimes() {
 	// fmt.Printf("]\n")
 
 	// Log to CSV file
-	if err := logTimesToCSV(b.ClientSideID, b.Times.ServerReceivedAt, b.Times.ServerStartedAt, b.Times.ServerRespondedAt, b.Times.TokenTimes); err != nil {
+	if err := logTimesToCSV(b.ClientSideID, b.Times.ServerStartedAt, b.Times.ServerRespondedAt, b.Times.TokenTimes); err != nil {
 		fmt.Printf("Error logging to CSV: %v\n", err)
 	}
 }
@@ -294,7 +294,7 @@ func initCSVLogger() error {
 	writer := csv.NewWriter(file)
 
 	// Write CSV header
-	header := []string{"client_side_id", "server_received_at", "server_started_at", "server_responded_at", "token_times"}
+	header := []string{"client_side_id", "server_started_at", "server_responded_at", "token_times"}
 	if err := writer.Write(header); err != nil {
 		err = file.Close()
 		if err != nil {
@@ -312,7 +312,7 @@ func initCSVLogger() error {
 }
 
 // logTimesToCSV logs timing data to the CSV file
-func logTimesToCSV(clientSideID string, serverReceivedAt, serverStartedAt, serverRespondedAt int64, tokenTimes []int64) error {
+func logTimesToCSV(clientSideID string, serverStartedAt, serverRespondedAt int64, tokenTimes []int64) error {
 	csvMutex.Lock()
 	defer csvMutex.Unlock()
 
@@ -336,7 +336,6 @@ func logTimesToCSV(clientSideID string, serverReceivedAt, serverStartedAt, serve
 	// Write the record
 	record := []string{
 		clientSideID,
-		strconv.FormatInt(serverReceivedAt, 10),
 		strconv.FormatInt(serverStartedAt, 10),
 		strconv.FormatInt(serverRespondedAt, 10),
 		tokenTimesStr,
