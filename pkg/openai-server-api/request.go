@@ -41,7 +41,7 @@ var (
 	csvFile    *os.File
 	csvWriter  *csv.Writer
 	csvMutex   sync.Mutex
-	csvLogDir  = "/root/.llm-d/log"
+	csvLogDir  = ".llm-d/log"
 	csvLogFile = "times.log.csv"
 )
 
