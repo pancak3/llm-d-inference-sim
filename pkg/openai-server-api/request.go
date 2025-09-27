@@ -244,19 +244,19 @@ func (b *BaseCompletionRequest) CalcTimes() {
 	b.Times.ServerRespondedAt -= b.Times.ServerReceivedAt
 	b.Times.ServerReceivedAt = 0
 
-	// fmt.Printf("\tTimes for request: %s\n\tserver_received_at: %d\n\tserver_started_at: %d\n\tserver_responded_at: %d\n\ttoken_times (micro seconds): [",
+	// fmt.Printf("\t\tTimes for request: %s\n\tserver_received_at: %d\n\tserver_started_at: %d\n\tserver_responded_at: %d\n\ttoken_times (micro seconds): [",
 	// 	b.ClientSideID, b.Times.ServerReceivedAt, b.Times.ServerStartedAt, b.Times.ServerRespondedAt)
 	// for i, tokenTime := range b.Times.TokenTimes {
-	// 	fmt.Printf("%d", tokenTime)
+	// 	fmt.Printf("\t%d", tokenTime)
 	// 	if i < len(b.Times.TokenTimes)-1 {
-	// 		fmt.Printf(", ")
+	// 		fmt.Printf("\t, ")
 	// 	}
 	// }
-	// fmt.Printf("]\n")
+	// fmt.Printf("\t]\n")
 
 	// Log to CSV file
 	if err := logTimesToCSV(b.ClientSideID, b.Times.ServerStartedAt, b.Times.ServerRespondedAt, b.Times.TokenTimes); err != nil {
-		fmt.Printf("Error logging to CSV: %v\n", err)
+		fmt.Printf("\tError logging to CSV: %v\n", err)
 	}
 }
 
@@ -282,7 +282,7 @@ func initCSVLogger() error {
 		if err := os.Rename(csvPath, backupPath); err != nil {
 			return fmt.Errorf("failed to backup existing CSV file: %w", err)
 		}
-		fmt.Printf("Backed up existing CSV file to: %s\n", backupPath)
+		fmt.Printf("\tBacked up existing CSV file to: %s\n", backupPath)
 	}
 
 	// Create new CSV file
@@ -298,7 +298,7 @@ func initCSVLogger() error {
 	if err := writer.Write(header); err != nil {
 		err = file.Close()
 		if err != nil {
-			fmt.Printf("failed to close CSV file after write error: %v\n", err)
+			fmt.Printf("\tfailed to close CSV file after write error: %v\n", err)
 		}
 		return fmt.Errorf("failed to write CSV header: %w", err)
 	}
@@ -307,7 +307,7 @@ func initCSVLogger() error {
 	csvFile = file
 	csvWriter = writer
 
-	fmt.Printf("Initialized new CSV log file: %s\n", csvPath)
+	fmt.Printf("\tInitialized new CSV log file: %s\n", csvPath)
 	return nil
 }
 
@@ -361,7 +361,7 @@ func CloseCSVLogger() {
 	if csvFile != nil {
 		err := csvFile.Close()
 		if err != nil {
-			fmt.Printf("failed to close CSV file: %v\n", err)
+			fmt.Printf("\tfailed to close CSV file: %v\n", err)
 		}
 		csvFile = nil
 	}
